@@ -305,7 +305,106 @@ fn day4(easy: bool, allocator: *Allocator) PuzzleError!u32 {
 }
 
 fn day5(easy: bool, allocator: *Allocator) PuzzleError!u32 {
-    return error.Unimplemented;
+    const Coord = struct { row: u16, col: u16 };
+    const Line = struct { from: Coord, to: Coord };
+
+    var lines = std.ArrayList(Line).init(allocator);
+    defer lines.deinit();
+    var rows: u16 = 0;
+    var columns: u16 = 0;
+
+    {
+        var file = std.fs.cwd().openFile("input/day5", .{}) catch return PuzzleError.MissingInput;
+        defer file.close();
+        var reader = file.reader();
+        var buf: [1024]u8 = undefined;
+
+        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |input_line| {
+            var lineIt = std.mem.split(input_line, " -> ");
+            const parseCoord = struct {
+                fn func(str: []const u8) !Coord {
+                    var coordIt = std.mem.split(str, ",");
+                    var ret: Coord = undefined;
+                    ret.row = try std.fmt.parseInt(u16, coordIt.next() orelse "", 10);
+                    ret.col = try std.fmt.parseInt(u16, coordIt.next() orelse "", 10);
+                    return ret;
+                }
+            }.func;
+            lines.append(undefined) catch return PuzzleError.OutOfMemory;
+            var line = &lines.items[lines.items.len - 1];
+            if (lineIt.next()) |lhs| {
+                line.*.from = parseCoord(lhs) catch return PuzzleError.InvalidInput;
+            } else return PuzzleError.InvalidInput;
+            if (lineIt.next()) |rhs| {
+                line.*.to = parseCoord(rhs) catch return PuzzleError.InvalidInput;
+            } else return PuzzleError.InvalidInput;
+            if (lineIt.next() != null) return PuzzleError.InvalidInput;
+            rows = std.math.max3(rows, line.from.row, line.to.row);
+            columns = std.math.max3(columns, line.from.col, line.to.col);
+        }
+    }
+    rows += 1;
+    columns += 1;
+
+    var floor = std.ArrayList(u8).init(allocator);
+    defer floor.deinit();
+    floor.appendNTimes(0, @as(u32, columns) * rows) catch return PuzzleError.OutOfMemory;
+
+    for (lines.items) |line| {
+        if (line.from.row == line.to.row) {
+            const row = line.from.row;
+            const min_col = std.math.min(line.from.col, line.to.col);
+            const max_col = std.math.max(line.from.col, line.to.col);
+            var col = min_col;
+            while (col <= max_col) : (col += 1) {
+                floor.items[@as(u32, row) * columns + col] += 1;
+            }
+        } else if (line.from.col == line.to.col) {
+            const col = line.from.col;
+            const min_row = std.math.min(line.from.row, line.to.row);
+            const max_row = std.math.max(line.from.row, line.to.row);
+            var row = min_row;
+            while (row <= max_row) : (row += 1) {
+                floor.items[@as(u32, row) * columns + col] += 1;
+            }
+        } else if (easy) {
+            continue;
+        } else {
+            const diffRow = std.math.absInt(@as(i32, line.from.row) - @as(i32, line.to.row)) catch unreachable;
+            const diffCol = std.math.absInt(@as(i32, line.from.col) - @as(i32, line.to.col)) catch unreachable;
+            if (diffRow != diffCol) return PuzzleError.InvalidInput;
+
+            const first_by_row = if (line.from.row < line.to.row) line.from else line.to;
+            const second_by_row = if (line.from.row < line.to.row) line.to else line.from;
+            const flipped = first_by_row.col > second_by_row.col;
+            // not flipped, like this
+            // \
+            //  \
+            //   \
+            // flipped, like that
+            //   /
+            //  /
+            // /
+            var diff = second_by_row.row - first_by_row.row;
+            var count: u16 = 0;
+            var row = first_by_row.row;
+            var col = first_by_row.col;
+            while (count <= diff) : (count += 1) {
+                floor.items[@as(u32, row) * columns + col] += 1;
+                row += 1;
+                if (flipped) {
+                    col -= 1;
+                } else {
+                    col += 1;
+                }
+            }
+        }
+    }
+    var atLeast2: u32 = 0;
+    for (floor.items) |value| {
+        if (value >= 2) atLeast2 += 1;
+    }
+    return atLeast2;
 }
 
 const answers = [_]*const fn (bool, *Allocator) PuzzleError!u32{
