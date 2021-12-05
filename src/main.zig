@@ -3,41 +3,31 @@ const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
-const PuzzleError = error{
-    MissingInput,
-    InvalidInput,
-    OutOfMemory,
-    Unimplemented,
-    Unexpected,
-};
-
-fn day1(easy: bool, allocator: *Allocator) PuzzleError!u32 {
-    var file = std.fs.cwd().openFile("input/day1", .{}) catch return PuzzleError.MissingInput;
+fn day1(easy: bool, allocator: *Allocator) !u32 {
+    var file = try std.fs.cwd().openFile("input/day1", .{});
     defer file.close();
 
     var buf: [512]u8 = undefined;
     var reader = file.reader();
+
+    var count_bigger: u32 = 0;
     if (easy) {
         var prev: u32 = std.math.maxInt(u32);
-        var count_bigger: u32 = 0;
-        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
-            var val: u32 = std.fmt.parseInt(u32, line, 10) catch return PuzzleError.InvalidInput;
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+            var val: u32 = try std.fmt.parseInt(u32, line, 10);
             if (val > prev)
                 count_bigger += 1;
             prev = val;
         }
-        return count_bigger;
     } else {
-        var count_bigger: u32 = 0;
-
         var window = [3]u32{ std.math.maxInt(u32), std.math.maxInt(u32), std.math.maxInt(u32) };
         var cur_index: u8 = 0;
         var sum: u64 = @intCast(u64, window[0]) + window[1] + window[2];
         var prev_sum = sum;
 
-        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
             sum -= window[cur_index];
-            window[cur_index] = std.fmt.parseInt(u32, line, 10) catch return PuzzleError.InvalidInput;
+            window[cur_index] = try std.fmt.parseInt(u32, line, 10);
             sum += window[cur_index];
             cur_index = (cur_index + 1) % 3;
             if (sum > prev_sum)
@@ -45,12 +35,12 @@ fn day1(easy: bool, allocator: *Allocator) PuzzleError!u32 {
             prev_sum = sum;
         }
 
-        return count_bigger;
     }
+    return count_bigger;
 }
 
-fn day2(easy: bool, allocator: *Allocator) PuzzleError!u32 {
-    var file = std.fs.cwd().openFile("input/day2", .{}) catch return PuzzleError.MissingInput;
+fn day2(easy: bool, allocator: *Allocator) !u32 {
+    var file = try std.fs.cwd().openFile("input/day2", .{});
     defer file.close();
 
     var buf: [512]u8 = undefined;
@@ -59,9 +49,9 @@ fn day2(easy: bool, allocator: *Allocator) PuzzleError!u32 {
     var horiz: u32 = 0;
     var depth: u32 = 0;
     if (easy) {
-        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
-            const sp: usize = std.mem.indexOfScalar(u8, line, ' ') orelse return PuzzleError.InvalidInput;
-            const num: u32 = std.fmt.parseInt(u32, line[sp + 1 ..], 10) catch return PuzzleError.InvalidInput;
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+            const sp: usize = std.mem.indexOfScalar(u8, line, ' ') orelse return error.Unexpected;
+            const num: u32 = try std.fmt.parseInt(u32, line[sp + 1 ..], 10);
             if (std.mem.startsWith(u8, line, "forward")) {
                 horiz += num;
             } else if (std.mem.startsWith(u8, line, "up")) {
@@ -72,9 +62,9 @@ fn day2(easy: bool, allocator: *Allocator) PuzzleError!u32 {
         }
     } else {
         var aim: u32 = 0;
-        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
-            const sp: usize = std.mem.indexOfScalar(u8, line, ' ') orelse return PuzzleError.InvalidInput;
-            const num: u32 = std.fmt.parseInt(u32, line[sp + 1 ..], 10) catch return PuzzleError.InvalidInput;
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+            const sp: usize = std.mem.indexOfScalar(u8, line, ' ') orelse return error.Unexpected;
+            const num: u32 = try std.fmt.parseInt(u32, line[sp + 1 ..], 10);
             if (std.mem.startsWith(u8, line, "forward")) {
                 horiz += num;
                 depth += num * aim;
@@ -88,7 +78,7 @@ fn day2(easy: bool, allocator: *Allocator) PuzzleError!u32 {
     return horiz * depth;
 }
 
-fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
+fn day3(easy: bool, allocator: *Allocator) !u32 {
     const digits = 12;
 
     const most_common_digit = struct {
@@ -107,13 +97,13 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
 
     const input: [][digits]u8 = blk: {
         var input = std.ArrayList([digits]u8).init(allocator);
-        var file = std.fs.cwd().openFile("input/day3", .{}) catch return PuzzleError.MissingInput;
+        var file = try std.fs.cwd().openFile("input/day3", .{});
         defer file.close();
         var reader = file.reader();
         var buf: [512]u8 = undefined;
-        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
-            if (line.len != digits) return PuzzleError.InvalidInput;
-            input.append(line[0..digits].*) catch return PuzzleError.OutOfMemory;
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+            if (line.len != digits) return error.InvalidArguments;
+            try input.append(line[0..digits].*);
         }
         break :blk input.toOwnedSlice();
     };
@@ -138,14 +128,14 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
                 most_common[i] = most_common_digit(input, i, false);
             }
         }
-        const gamma_rate: u32 = std.fmt.parseInt(u32, most_common[0..], 2) catch return PuzzleError.Unexpected;
-        const epsilon_rate: u32 = std.fmt.parseInt(u32, flip_digits(most_common)[0..], 2) catch return PuzzleError.Unexpected;
+        const gamma_rate: u32 = try std.fmt.parseInt(u32, most_common[0..], 2);
+        const epsilon_rate: u32 = try std.fmt.parseInt(u32, flip_digits(most_common)[0..], 2);
         return gamma_rate * epsilon_rate;
     } else {
         var res: u32 = 1;
         for ([_]bool{ false, true }) |most_or_least| {
             var input_copy = std.ArrayList([digits]u8).init(allocator);
-            input_copy.appendSlice(input) catch return PuzzleError.OutOfMemory;
+            try input_copy.appendSlice(input);
 
             var i: u8 = 0;
             while (i < digits) : (i += 1) {
@@ -163,17 +153,17 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
                 if (input_copy.items.len <= 1) break;
             }
             if (input_copy.items.len == 1) {
-                const measure: u32 = std.fmt.parseInt(u32, input_copy.items[0][0..], 2) catch return PuzzleError.Unexpected;
+                const measure: u32 = try std.fmt.parseInt(u32, input_copy.items[0][0..], 2);
                 res *= measure;
             } else {
-                return PuzzleError.Unexpected;
+                return error.Unexpected;
             }
         }
         return res;
     }
 }
 
-fn day4(easy: bool, allocator: *Allocator) PuzzleError!u32 {
+fn day4(easy: bool, allocator: *Allocator) !u32 {
     const board_size = 5;
     const Board = struct {
         values: [board_size][board_size]?u32,
@@ -185,46 +175,44 @@ fn day4(easy: bool, allocator: *Allocator) PuzzleError!u32 {
     var boards = std.ArrayList(Board).init(allocator);
     defer boards.deinit();
     {
-        var file = std.fs.cwd().openFile("input/day4", .{}) catch return PuzzleError.MissingInput;
+        var file = try std.fs.cwd().openFile("input/day4", .{});
         defer file.close();
         var reader = file.reader();
         var buf: [1024]u8 = undefined;
 
         {
-            const first_line = reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput;
-            if (first_line == null) return PuzzleError.InvalidInput;
+            const first_line = try reader.readUntilDelimiterOrEof(&buf, '\n');
+            if (first_line == null) return error.Unexpected;
 
             var it = std.mem.split(first_line.?, ",");
             while (it.next()) |numstr| {
-                const number: u32 = std.fmt.parseInt(u32, numstr, 10) catch return PuzzleError.InvalidInput;
-                input_numbers.append(number) catch return PuzzleError.InvalidInput;
+                const number: u32 = try std.fmt.parseInt(u32, numstr, 10);
+                try input_numbers.append(number);
             }
         }
 
         while (true) {
-            const empty_line = reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput;
+            const empty_line = try reader.readUntilDelimiterOrEof(&buf, '\n');
             if (empty_line == null) break;
 
-            boards.append(undefined) catch return PuzzleError.OutOfMemory;
+            try boards.append(undefined);
             var row: u8 = 0;
             while (row < board_size) : (row += 1) {
-                const line = reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput;
-                if (line == null) return PuzzleError.InvalidInput;
+                const line = try reader.readUntilDelimiterOrEof(&buf, '\n');
+                if (line == null) return error.Unexpected;
                 var it = std.mem.tokenize(line.?, " ");
                 var col: u8 = 0;
                 while (it.next()) |numstr| {
-                    if (col >= 5) return PuzzleError.InvalidInput;
-                    const number: u32 = std.fmt.parseInt(u32, numstr, 10) catch {
-                        return PuzzleError.InvalidInput;
-                    };
+                    if (col >= 5) return error.Unexpected;
+                    const number: u32 = try std.fmt.parseInt(u32, numstr, 10);
                     boards.items[boards.items.len - 1].values[row][col] = number;
                     col += 1;
                 }
-                if (col < 5) return PuzzleError.InvalidInput;
+                if (col < 5) return error.Unexpected;
             }
         }
 
-        if (input_numbers.items.len == 0 or boards.items.len == 0) return PuzzleError.InvalidInput;
+        if (input_numbers.items.len == 0 or boards.items.len == 0) return error.Unexpected;
     }
 
     const Coord = struct { row: u8, col: u8 };
@@ -304,7 +292,7 @@ fn day4(easy: bool, allocator: *Allocator) PuzzleError!u32 {
     return error.Unimplemented;
 }
 
-fn day5(easy: bool, allocator: *Allocator) PuzzleError!u32 {
+fn day5(easy: bool, allocator: *Allocator) !u32 {
     const Coord = struct { row: u16, col: u16 };
     const Line = struct { from: Coord, to: Coord };
 
@@ -314,12 +302,12 @@ fn day5(easy: bool, allocator: *Allocator) PuzzleError!u32 {
     var columns: u16 = 0;
 
     {
-        var file = std.fs.cwd().openFile("input/day5", .{}) catch return PuzzleError.MissingInput;
+        var file = try std.fs.cwd().openFile("input/day5", .{});
         defer file.close();
         var reader = file.reader();
         var buf: [1024]u8 = undefined;
 
-        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |input_line| {
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |input_line| {
             var lineIt = std.mem.split(input_line, " -> ");
             const parseCoord = struct {
                 fn func(str: []const u8) !Coord {
@@ -330,15 +318,15 @@ fn day5(easy: bool, allocator: *Allocator) PuzzleError!u32 {
                     return ret;
                 }
             }.func;
-            lines.append(undefined) catch return PuzzleError.OutOfMemory;
+            try lines.append(undefined);
             var line = &lines.items[lines.items.len - 1];
             if (lineIt.next()) |lhs| {
-                line.*.from = parseCoord(lhs) catch return PuzzleError.InvalidInput;
-            } else return PuzzleError.InvalidInput;
+                line.*.from = try parseCoord(lhs);
+            } else return error.Unexpected;
             if (lineIt.next()) |rhs| {
-                line.*.to = parseCoord(rhs) catch return PuzzleError.InvalidInput;
-            } else return PuzzleError.InvalidInput;
-            if (lineIt.next() != null) return PuzzleError.InvalidInput;
+                line.*.to = try parseCoord(rhs);
+            } else return error.Unexpected;
+            if (lineIt.next() != null) return error.Unexpected;
             rows = std.math.max3(rows, line.from.row, line.to.row);
             columns = std.math.max3(columns, line.from.col, line.to.col);
         }
@@ -348,7 +336,7 @@ fn day5(easy: bool, allocator: *Allocator) PuzzleError!u32 {
 
     var floor = std.ArrayList(u8).init(allocator);
     defer floor.deinit();
-    floor.appendNTimes(0, @as(u32, columns) * rows) catch return PuzzleError.OutOfMemory;
+    try floor.appendNTimes(0, @as(u32, columns) * rows);
 
     for (lines.items) |line| {
         if (line.from.row == line.to.row) {
@@ -372,7 +360,7 @@ fn day5(easy: bool, allocator: *Allocator) PuzzleError!u32 {
         } else {
             const diffRow = std.math.absInt(@as(i32, line.from.row) - @as(i32, line.to.row)) catch unreachable;
             const diffCol = std.math.absInt(@as(i32, line.from.col) - @as(i32, line.to.col)) catch unreachable;
-            if (diffRow != diffCol) return PuzzleError.InvalidInput;
+            if (diffRow != diffCol) return error.Unexpected;
 
             const first_by_row = if (line.from.row < line.to.row) line.from else line.to;
             const second_by_row = if (line.from.row < line.to.row) line.to else line.from;
@@ -407,14 +395,6 @@ fn day5(easy: bool, allocator: *Allocator) PuzzleError!u32 {
     return atLeast2;
 }
 
-const answers = [_]*const fn (bool, *Allocator) PuzzleError!u32{
-    &day1,
-    &day2,
-    &day3,
-    &day4,
-    &day5,
-};
-
 pub fn main() anyerror!void {
     const stdout = std.io.getStdOut().writer();
 
@@ -433,10 +413,14 @@ pub fn main() anyerror!void {
     else
         return error.InvalidArguments;
 
-    if (puzzle == 0 or puzzle > answers.len)
-        return error.InvalidArguments;
-
-    const val: u32 = try answers[puzzle - 1].*(easy, &arena.allocator);
+    const val = switch (puzzle) {
+        1 => day1(easy, &arena.allocator),
+        2 => day2(easy, &arena.allocator),
+        3 => day3(easy, &arena.allocator),
+        4 => day4(easy, &arena.allocator),
+        5 => day5(easy, &arena.allocator),
+        else => return error.InvalidArguments,
+    };
 
     const str = if (easy) "easy" else "hard";
     try stdout.print("Answer to day {} ({s}) is: {}\n", .{ puzzle, str, val });
