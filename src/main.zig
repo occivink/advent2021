@@ -174,6 +174,133 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
 }
 
 fn day4(easy: bool, allocator: *Allocator) PuzzleError!u32 {
+    const board_size = 5;
+    const Board = struct {
+        values: [board_size][board_size]?u32,
+        won: bool = false,
+    };
+
+    var input_numbers = std.ArrayList(u32).init(allocator);
+    defer input_numbers.deinit();
+    var boards = std.ArrayList(Board).init(allocator);
+    defer boards.deinit();
+    {
+        var file = std.fs.cwd().openFile("input/day4", .{}) catch return PuzzleError.MissingInput;
+        defer file.close();
+        var reader = file.reader();
+        var buf: [1024]u8 = undefined;
+
+        {
+            const first_line = reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput;
+            if (first_line == null) return PuzzleError.InvalidInput;
+
+            var it = std.mem.split(first_line.?, ",");
+            while (it.next()) |numstr| {
+                const number: u32 = std.fmt.parseInt(u32, numstr, 10) catch return PuzzleError.InvalidInput;
+                input_numbers.append(number) catch return PuzzleError.InvalidInput;
+            }
+        }
+
+        while (true) {
+            const empty_line = reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput;
+            if (empty_line == null) break;
+
+            boards.append(undefined) catch return PuzzleError.OutOfMemory;
+            var row: u8 = 0;
+            while (row < board_size) : (row += 1) {
+                const line = reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput;
+                if (line == null) return PuzzleError.InvalidInput;
+                var it = std.mem.tokenize(line.?, " ");
+                var col: u8 = 0;
+                while (it.next()) |numstr| {
+                    if (col >= 5) return PuzzleError.InvalidInput;
+                    const number: u32 = std.fmt.parseInt(u32, numstr, 10) catch {
+                        return PuzzleError.InvalidInput;
+                    };
+                    boards.items[boards.items.len - 1].values[row][col] = number;
+                    col += 1;
+                }
+                if (col < 5) return PuzzleError.InvalidInput;
+            }
+        }
+
+        if (input_numbers.items.len == 0 or boards.items.len == 0) return PuzzleError.InvalidInput;
+    }
+
+    const Coord = struct { row: u8, col: u8 };
+    const get_coord = struct {
+        fn func(value: u32, board: Board) ?Coord {
+            var row: u8 = 0;
+            while (row < board_size) : (row += 1) {
+                var col: u8 = 0;
+                while (col < board_size) : (col += 1) {
+                    if (board.values[row][col] == value)
+                        return Coord{ .row = row, .col = col };
+                }
+            }
+            return null;
+        }
+    }.func;
+    const check_winning = struct {
+        fn func(board: Board, coord: Coord) bool {
+            var row: u8 = 0;
+            while (row < board_size) : (row += 1) {
+                if (board.values[row][coord.col] != null)
+                    break;
+            } else return true;
+            var col: u8 = 0;
+            while (col < board_size) : (col += 1) {
+                if (board.values[coord.row][col] != null)
+                    break;
+            } else return true;
+            return false;
+        }
+    }.func;
+    const get_unmarked_sum = struct {
+        fn func(board: Board) u32 {
+            var sum: u32 = 0;
+            var row: u8 = 0;
+            while (row < board_size) : (row += 1) {
+                var col: u8 = 0;
+                while (col < board_size) : (col += 1) {
+                    if (board.values[row][col]) |val|
+                        sum += val;
+                }
+            }
+            return sum;
+        }
+    }.func;
+
+    if (easy) {
+        for (input_numbers.items) |number| {
+            for (boards.items) |_, board_num| {
+                var board = &boards.items[board_num];
+                if (get_coord(number, board.*)) |coord| {
+                    board.*.values[coord.row][coord.col] = null;
+                    if (check_winning(board.*, coord)) {
+                        return get_unmarked_sum(board.*) * number;
+                    }
+                }
+            }
+        }
+        return error.InvalidInput;
+    } else {
+        var last_score: ?u32 = null;
+        for (input_numbers.items) |number| {
+            for (boards.items) |_, board_num| {
+                var board = &boards.items[board_num];
+                if (board.*.won) continue;
+                if (get_coord(number, board.*)) |coord| {
+                    board.*.values[coord.row][coord.col] = null;
+                    if (check_winning(board.*, coord)) {
+                        board.*.won = true;
+                        last_score = get_unmarked_sum(board.*) * number;
+                    }
+                }
+            }
+        }
+        return last_score orelse error.InvalidInput;
+    }
     return error.Unimplemented;
 }
 
