@@ -92,12 +92,12 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
     const digits = 12;
 
     const most_common_digit = struct {
-        fn func(list: std.ArrayList([digits]u8), digit: u8, reverse: bool) u8 {
+        fn func(list: [][digits]u8, digit: u8, reverse: bool) u8 {
             var num_1: u32 = 0;
-            for (list.items) |value| {
+            for (list) |value| {
                 if (value[digit] == '1') num_1 += 1;
             }
-            if (num_1 * 2 >= list.items.len) {
+            if (num_1 * 2 >= list.len) {
                 return if (reverse) '0' else '1';
             } else {
                 return if (reverse) '1' else '0';
@@ -105,20 +105,19 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
         }
     }.func;
 
-    const list: std.ArrayList([digits]u8) = blk: {
-        var list = std.ArrayList([digits]u8).init(allocator);
+    const input: [][digits]u8 = blk: {
+        var input = std.ArrayList([digits]u8).init(allocator);
         var file = std.fs.cwd().openFile("input/day3", .{}) catch return PuzzleError.MissingInput;
         defer file.close();
         var reader = file.reader();
         var buf: [512]u8 = undefined;
         while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
             if (line.len != digits) return PuzzleError.InvalidInput;
-            list.append(line[0..digits].*) catch return PuzzleError.OutOfMemory;
+            input.append(line[0..digits].*) catch return PuzzleError.OutOfMemory;
         }
-        //list.resize(10) catch |err| {};
-        break :blk list;
+        break :blk input.toOwnedSlice();
     };
-    defer list.deinit();
+    defer allocator.free(input);
 
     if (easy) {
         const flip_digits = struct {
@@ -136,7 +135,7 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
         {
             var i: u8 = 0;
             while (i < digits) : (i += 1) {
-                most_common[i] = most_common_digit(list, i, false);
+                most_common[i] = most_common_digit(input, i, false);
             }
         }
         const gamma_rate: u32 = std.fmt.parseInt(u32, most_common[0..], 2) catch return PuzzleError.Unexpected;
@@ -146,11 +145,11 @@ fn day3(easy: bool, allocator: *Allocator) PuzzleError!u32 {
         var res: u32 = 1;
         for ([_]bool{ false, true }) |most_or_least| {
             var input_copy = std.ArrayList([digits]u8).init(allocator);
-            input_copy.appendSlice(list.items) catch return PuzzleError.OutOfMemory;
+            input_copy.appendSlice(input) catch return PuzzleError.OutOfMemory;
 
             var i: u8 = 0;
             while (i < digits) : (i += 1) {
-                const keep: u8 = most_common_digit(input_copy, i, most_or_least);
+                const keep: u8 = most_common_digit(input_copy.items, i, most_or_least);
                 var j: u32 = 0;
                 var culled: u32 = 0;
                 while (j < input_copy.items.len) {
