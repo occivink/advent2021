@@ -47,7 +47,42 @@ fn day1(easy: bool) PuzzleError!u32 {
 }
 
 fn day2(easy: bool) PuzzleError!u32 {
-    return error.Unimplemented;
+    var file = std.fs.cwd().openFile("input/day2", .{}) catch return PuzzleError.MissingInput;
+    defer file.close();
+
+    var buf: [512]u8 = undefined;
+    var reader = file.reader();
+
+    var horiz: u32 = 0;
+    var depth: u32 = 0;
+    if (easy) {
+        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
+            const sp: usize = std.mem.indexOfScalar(u8, line, ' ') orelse return PuzzleError.InvalidInput;
+            const num: u32 = std.fmt.parseInt(u32, line[sp+1..], 10) catch return PuzzleError.InvalidInput;
+            if (std.mem.startsWith(u8, line, "forward")) {
+                horiz += num;
+            } else if (std.mem.startsWith(u8, line, "up")) {
+                depth -= num;
+            } else if (std.mem.startsWith(u8, line, "down")) {
+                depth += num;
+            }
+        }
+    } else {
+        var aim: u32 = 0;
+        while (reader.readUntilDelimiterOrEof(&buf, '\n') catch return PuzzleError.InvalidInput) |line| {
+            const sp: usize = std.mem.indexOfScalar(u8, line, ' ') orelse return PuzzleError.InvalidInput;
+            const num: u32 = std.fmt.parseInt(u32, line[sp+1..], 10) catch return PuzzleError.InvalidInput;
+            if (std.mem.startsWith(u8, line, "forward")) {
+                horiz += num;
+                depth += num * aim;
+            } else if (std.mem.startsWith(u8, line, "up")) {
+                aim -= num;
+            } else if (std.mem.startsWith(u8, line, "down")) {
+                aim += num;
+            }
+        }
+    }
+    return horiz * depth;
 }
 
 fn day3(easy: bool) PuzzleError!u32 {
