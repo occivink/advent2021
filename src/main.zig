@@ -3,7 +3,7 @@ const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
-fn day1(easy: bool, allocator: *Allocator) !u32 {
+fn day1(easy: bool, allocator: *Allocator) !u64 {
     var file = try std.fs.cwd().openFile("input/day1", .{});
     defer file.close();
 
@@ -39,7 +39,7 @@ fn day1(easy: bool, allocator: *Allocator) !u32 {
     return count_bigger;
 }
 
-fn day2(easy: bool, allocator: *Allocator) !u32 {
+fn day2(easy: bool, allocator: *Allocator) !u64 {
     var file = try std.fs.cwd().openFile("input/day2", .{});
     defer file.close();
 
@@ -78,7 +78,7 @@ fn day2(easy: bool, allocator: *Allocator) !u32 {
     return horiz * depth;
 }
 
-fn day3(easy: bool, allocator: *Allocator) !u32 {
+fn day3(easy: bool, allocator: *Allocator) !u64 {
     const digits = 12;
 
     const most_common_digit = struct {
@@ -141,13 +141,11 @@ fn day3(easy: bool, allocator: *Allocator) !u32 {
             while (i < digits) : (i += 1) {
                 const keep: u8 = most_common_digit(input_copy.items, i, most_or_least);
                 var j: u32 = 0;
-                var culled: u32 = 0;
                 while (j < input_copy.items.len) {
                     if (input_copy.items[j][i] == keep) {
                         j += 1;
                     } else {
                         _ = input_copy.swapRemove(j);
-                        culled += 1;
                     }
                 }
                 if (input_copy.items.len <= 1) break;
@@ -163,7 +161,7 @@ fn day3(easy: bool, allocator: *Allocator) !u32 {
     }
 }
 
-fn day4(easy: bool, allocator: *Allocator) !u32 {
+fn day4(easy: bool, allocator: *Allocator) !u64 {
     const board_size = 5;
     const Board = struct {
         values: [board_size][board_size]?u32,
@@ -261,8 +259,7 @@ fn day4(easy: bool, allocator: *Allocator) !u32 {
 
     if (easy) {
         for (input_numbers.items) |number| {
-            for (boards.items) |_, board_num| {
-                var board = &boards.items[board_num];
+            for (boards.items) |*board| {
                 if (get_coord(number, board.*)) |coord| {
                     board.*.values[coord.row][coord.col] = null;
                     if (check_winning(board.*, coord)) {
@@ -275,8 +272,7 @@ fn day4(easy: bool, allocator: *Allocator) !u32 {
     } else {
         var last_score: ?u32 = null;
         for (input_numbers.items) |number| {
-            for (boards.items) |_, board_num| {
-                var board = &boards.items[board_num];
+            for (boards.items) |*board| {
                 if (board.*.won) continue;
                 if (get_coord(number, board.*)) |coord| {
                     board.*.values[coord.row][coord.col] = null;
@@ -292,7 +288,7 @@ fn day4(easy: bool, allocator: *Allocator) !u32 {
     return error.Unimplemented;
 }
 
-fn day5(easy: bool, allocator: *Allocator) !u32 {
+fn day5(easy: bool, allocator: *Allocator) !u64 {
     const Coord = struct { row: u16, col: u16 };
     const Line = struct { from: Coord, to: Coord };
 
@@ -395,11 +391,42 @@ fn day5(easy: bool, allocator: *Allocator) !u32 {
     return atLeast2;
 }
 
-pub fn main() anyerror!void {
+fn day6(easy: bool, allocator: *Allocator) !u64 {
+    var fishies = [_]u64{0} ** 9;
+    {
+        var file = try std.fs.cwd().openFile("input/day6", .{});
+        defer file.close();
+        var reader = file.reader();
+        var buf: [1024]u8 = undefined;
+
+        var line = try reader.readUntilDelimiterOrEof(&buf, '\n');
+        if (line == null) return error.InvalidInput;
+        var it = std.mem.split(line.?, ",");
+        while (it.next()) |numstr| {
+            const num = try std.fmt.parseInt(u8, numstr, 10);
+            if (num >= fishies.len) return error.InvalidInput;
+            fishies[num] += 1;
+        }
+    }
+    var days: u32 = if (easy) 80 else 256;
+    while (days > 0) : (days -= 1) {
+        var tmp: u64 = fishies[0];
+        var i: u32 = 1;
+        while (i < fishies.len) : (i += 1) {
+            fishies[i - 1] = fishies[i];
+        }
+        fishies[fishies.len - 1] = tmp;
+        fishies[6] += fishies[8];
+    }
+    var sum: u64 = 0;
+    for (fishies) |fish| { sum += fish; }
+    return sum;
+}
+
+pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
+    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
 
     const args: [][*:0]u8 = std.os.argv;
     if (args.len != 3)
@@ -414,11 +441,12 @@ pub fn main() anyerror!void {
         return error.InvalidArguments;
 
     const val = switch (puzzle) {
-        1 => day1(easy, &arena.allocator),
-        2 => day2(easy, &arena.allocator),
-        3 => day3(easy, &arena.allocator),
-        4 => day4(easy, &arena.allocator),
-        5 => day5(easy, &arena.allocator),
+        1 => day1(easy, &allocator.allocator),
+        2 => day2(easy, &allocator.allocator),
+        3 => day3(easy, &allocator.allocator),
+        4 => day4(easy, &allocator.allocator),
+        5 => day5(easy, &allocator.allocator),
+        6 => day6(easy, &allocator.allocator),
         else => return error.InvalidArguments,
     };
 
