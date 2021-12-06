@@ -410,12 +410,7 @@ fn day6(easy: bool, allocator: *Allocator) !u64 {
     }
     var days: u32 = if (easy) 80 else 256;
     while (days > 0) : (days -= 1) {
-        var tmp: u64 = fishies[0];
-        var i: u32 = 1;
-        while (i < fishies.len) : (i += 1) {
-            fishies[i - 1] = fishies[i];
-        }
-        fishies[fishies.len - 1] = tmp;
+        std.mem.rotate(u64, fishies[0..], 1);
         fishies[6] += fishies[8];
     }
     var sum: u64 = 0;
