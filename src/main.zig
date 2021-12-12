@@ -34,7 +34,6 @@ fn day1(easy: bool, allocator: *Allocator) !u64 {
                 count_bigger += 1;
             prev_sum = sum;
         }
-
     }
     return count_bigger;
 }
@@ -414,14 +413,598 @@ fn day6(easy: bool, allocator: *Allocator) !u64 {
         fishies[6] += fishies[8];
     }
     var sum: u64 = 0;
-    for (fishies) |fish| { sum += fish; }
+    for (fishies) |fish| {
+        sum += fish;
+    }
     return sum;
+}
+
+fn day7(easy: bool, allocator: *Allocator) !u64 {
+    var file = try std.fs.cwd().openFile("input/day7", .{});
+    defer file.close();
+
+    var number_list = std.ArrayList(u16).init(allocator);
+    defer number_list.deinit();
+
+    var reader = file.reader();
+    var numbuf: [8]u8 = undefined;
+    var size: u8 = 0;
+    while (true) {
+        const byte = reader.readByte() catch break;
+        switch (byte) {
+            ',', '\n' => {
+                try number_list.append(try std.fmt.parseInt(u16, numbuf[0..size], 10));
+                size = 0;
+            },
+            else => {
+                if (size == numbuf.len) return error.InvalidInput;
+                numbuf[size] = byte;
+                size += 1;
+            },
+        }
+    }
+
+    if (easy) {
+        std.sort.sort(u16, number_list.items, {}, comptime std.sort.asc(u16));
+        const items = number_list.items;
+        var median: u16 = undefined;
+        if (items.len % 2 == 1)
+            median = items[items.len / 2]
+        else {
+            var medf = @intToFloat(f32, items[items.len / 2 - 1] + items[items.len / 2]) / 2.0;
+            median = @floatToInt(u16, std.math.round(medf));
+        }
+        var total: u32 = 0;
+        for (items) |number| {
+            total += if (number > median) number - median else median - number;
+        }
+        return total;
+    } else {
+        // not clear what the solution is, fuck it let's brute force
+        var max: u16 = std.mem.max(u16, number_list.items);
+        var min: u16 = std.mem.min(u16, number_list.items);
+
+        var minSum: u32 = std.math.maxInt(u32);
+        var i = min;
+        while (i <= max) : (i += 1) {
+            var sum: u32 = 0;
+            for (number_list.items) |number| {
+                const dist: u32 = if (number > i) number - i else i - number;
+                sum += dist * (dist + 1) / 2;
+            }
+            minSum = std.math.min(minSum, sum);
+        }
+        return minSum;
+    }
+}
+
+fn day8(easy: bool, allocator: *Allocator) !u64 {
+    //   a
+    //  b c
+    //   d
+    //  e f
+    //   g
+
+    var file = try std.fs.cwd().openFile("input/day8", .{});
+    defer file.close();
+    var reader = file.reader();
+    var buf: [128]u8 = undefined;
+
+    //var input: [9][7]u8
+    //while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+    return error.Unimplemented;
+}
+
+fn day9(easy: bool, allocator: *Allocator) !u64 {
+    const get_coord = struct {
+        fn func(row: u8, col: u8, columns: u8) usize {
+            return @intCast(usize, row) * columns + col;
+        }
+    }.func;
+    const height_at = struct {
+        fn func(heightmap: []u4, row: u8, col: u8, columns: u8) u4 {
+            return heightmap[get_coord(row, col, columns)];
+        }
+    }.func;
+
+    var heightmap = std.ArrayList(u4).init(allocator);
+    defer heightmap.deinit();
+    var rows: u8 = 0;
+    var columns: u8 = 0;
+
+    // encircle the heightmap with '9' so that we don't have to special case the edges
+    var file = try std.fs.cwd().openFile("input/day9", .{});
+    defer file.close();
+    var reader = file.reader();
+    var buf: [128]u8 = undefined;
+    while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+        if (heightmap.items.len == 0) {
+            if ((line.len + 2) > std.math.maxInt(u8)) return error.InvalidInput;
+            columns = @intCast(u8, (line.len + 2));
+            try heightmap.appendNTimes(9, columns);
+            rows += 1;
+        } else if ((line.len + 2) != columns) {
+            return error.InvalidInput;
+        }
+        try heightmap.append(9);
+        var i: u8 = 0;
+        while (i < line.len) : (i += 1) {
+            try heightmap.append(try std.fmt.parseInt(u4, line[i .. i + 1], 10));
+        }
+        rows += 1;
+        try heightmap.append(9);
+    }
+    try heightmap.appendNTimes(9, columns);
+    rows += 1;
+
+    if (easy) {
+        var sum: u32 = 0;
+        // skip edges, we know they're 9s
+        var row: u8 = 1;
+        while (row < (rows - 1)) : (row += 1) {
+            var column: u8 = 1;
+            while (column < (columns - 1)) : (column += 1) {
+                const coord = get_coord(row, column, columns);
+                const height = heightmap.items[coord];
+                if (height < heightmap.items[coord + 1] and
+                    height < heightmap.items[coord - 1] and
+                    height < heightmap.items[coord + columns] and
+                    height < heightmap.items[coord - columns])
+                {
+                    sum += height + 1;
+                }
+            }
+        }
+        return sum;
+    } else {
+        var maxBasinsSize = [3]u32{ 0, 0, 0 };
+        var row: u8 = 1;
+        var basinExplorerStack = std.ArrayList(usize).init(allocator);
+        defer basinExplorerStack.deinit();
+
+        while (row < (rows - 1)) : (row += 1) {
+            var column: u8 = 1;
+            while (column < (columns - 1)) : (column += 1) {
+                const coord_start = get_coord(row, column, columns);
+                if (heightmap.items[coord_start] == 9) {
+                    continue;
+                }
+                try basinExplorerStack.append(coord_start);
+                var basinSize: u32 = 0;
+                while (basinExplorerStack.items.len > 0) {
+                    const cur = basinExplorerStack.pop();
+                    if (heightmap.items[cur] == 9) continue;
+                    try basinExplorerStack.append(cur + 1);
+                    try basinExplorerStack.append(cur - 1);
+                    try basinExplorerStack.append(cur + columns);
+                    try basinExplorerStack.append(cur - columns);
+                    heightmap.items[cur] = 9;
+                    basinSize += 1;
+                }
+                if (basinSize > maxBasinsSize[0]) {
+                    maxBasinsSize[0] = basinSize;
+                    std.sort.sort(u32, maxBasinsSize[0..], {}, comptime std.sort.asc(u32));
+                }
+            }
+        }
+        return maxBasinsSize[0] * maxBasinsSize[1] * maxBasinsSize[2];
+    }
+}
+
+fn day10(easy: bool, allocator: *Allocator) !u64 {
+    const is_opener = struct {
+        fn func(v: u8) bool {
+            return switch (v) {
+                '{', '[', '<', '(' => true,
+                else => false,
+            };
+        }
+    }.func;
+    const is_closer = struct {
+        fn func(v: u8) bool {
+            return switch (v) {
+                '}', ']', '>', ')' => true,
+                else => false,
+            };
+        }
+    }.func;
+    const matches = struct {
+        fn func(closer: u8, opener: u8) !bool {
+            return switch (opener) {
+                '{' => return (closer == '}'),
+                '[' => return (closer == ']'),
+                '<' => return (closer == '>'),
+                '(' => return (closer == ')'),
+                else => return error.Unexpected,
+            };
+        }
+    }.func;
+
+    var completion_scores = std.ArrayList(u64).init(allocator);
+    defer completion_scores.deinit();
+
+    var file = try std.fs.cwd().openFile("input/day10", .{});
+    defer file.close();
+    var score_illegal: u32 = 0;
+    var reader = file.reader();
+    var buf: [1024]u8 = undefined;
+    while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |input_line| {
+        var opener_stack: [1024]u8 = undefined;
+        var opener_stack_size: u16 = 0;
+        var i: u32 = 0;
+        while (i < input_line.len) : (i += 1) {
+            const value: u8 = input_line[i];
+            if (is_opener(value)) {
+                if (opener_stack_size >= opener_stack.len) {
+                    // depth exceeded
+                    return error.InvalidInput;
+                }
+                opener_stack[opener_stack_size] = value;
+                opener_stack_size += 1;
+            } else if (is_closer(value)) {
+                if (opener_stack_size > 0 and try matches(value, opener_stack[opener_stack_size - 1])) {
+                    opener_stack_size -= 1;
+                } else {
+                    score_illegal += switch (value) {
+                        ')' => @as(u32, 3),
+                        ']' => @as(u32, 57),
+                        '}' => @as(u32, 1197),
+                        '>' => @as(u32, 25137),
+                        else => unreachable,
+                    };
+                    break;
+                }
+            } else {
+                return error.InvalidInput;
+            }
+        } else {
+            var score: u64 = 0;
+            var j: u32 = opener_stack_size - 1;
+            while (true) {
+                score = (score * 5) + switch (opener_stack[j]) {
+                    '(' => @as(u64, 1),
+                    '[' => @as(u64, 2),
+                    '{' => @as(u64, 3),
+                    '<' => @as(u64, 4),
+                    else => unreachable,
+                };
+                if (j == 0) {
+                    break;
+                } else {
+                    j -= 1;
+                }
+            }
+            try completion_scores.append(score);
+        }
+    }
+    if (easy) {
+        return score_illegal;
+    } else {
+        std.sort.sort(u64, completion_scores.items, {}, comptime std.sort.asc(u64));
+        return completion_scores.items[(completion_scores.items.len - 1) / 2];
+    }
+}
+
+fn day11(easy: bool, allocator: *Allocator) !u64 {
+    const input_size = 10;
+    const board_size = input_size + 2;
+
+    const FLASHING: u4 = 10;
+    const FLASHED: u4 = 11;
+    const WALL: u4 = 15;
+
+    var octopus_grid = [_]u4{WALL} ** (board_size * board_size);
+
+    {
+        var file = try std.fs.cwd().openFile("input/day11", .{});
+        defer file.close();
+        var reader = file.reader();
+        var buf: [16]u8 = undefined;
+
+        var row: u16 = board_size;
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |input_line| {
+            if (row >= octopus_grid.len or input_line.len != input_size) {
+                return error.InvalidInput;
+            }
+            var i: u8 = 0;
+            while (i < input_line.len) : (i += 1) {
+                octopus_grid[row + i + 1] = try std.fmt.parseInt(u4, input_line[i .. i + 1], 10);
+            }
+            row += board_size;
+        }
+        row += board_size;
+        if (row != octopus_grid.len) {
+            return error.InvalidInput;
+        }
+    }
+
+    const perform_epoch = struct {
+        fn func(grid: []u4, flashing: *std.ArrayList(u8)) !u32 {
+            var flashes: u32 = 0;
+
+            const increment_octopus = struct {
+                fn func(grid2: []u4, coord: u8, flashing2: *std.ArrayList(u8), flash_count: *u32) !void {
+                    if (grid2[coord] > 9)
+                        return;
+                    grid2[coord] += 1;
+                    if (grid2[coord] == FLASHING) {
+                        try flashing2.*.append(coord);
+                        flash_count.* += 1;
+                    }
+                }
+            }.func;
+
+            var i: u8 = 0;
+            while (i < board_size * board_size) : (i += 1) {
+                try increment_octopus(grid, i, flashing, &flashes);
+            }
+
+            while (flashing.*.items.len > 0) {
+                const cur = flashing.*.pop();
+                grid[cur] = FLASHED;
+                for ([_]u8{ cur - board_size, cur, cur + board_size }) |t1| {
+                    for ([_]u8{ t1 - 1, t1, t1 + 1 }) |t2| {
+                        try increment_octopus(grid, t2, flashing, &flashes);
+                    }
+                }
+            }
+
+            i = 0;
+            while (i < board_size * board_size) : (i += 1) {
+                if (grid[i] == FLASHED)
+                    grid[i] = 0;
+            }
+
+            return flashes;
+        }
+    }.func;
+
+    var flashing_octopuses = std.ArrayList(u8).init(allocator);
+    defer flashing_octopuses.deinit();
+
+    if (easy) {
+        var epoch: u8 = 100;
+        var flashes: u32 = 0;
+        while (epoch > 0) : (epoch -= 1) {
+            flashes += try perform_epoch(octopus_grid[0..], &flashing_octopuses);
+        }
+        return flashes;
+    } else {
+        var epoch: u32 = 1;
+        const all_octopuses: u32 = input_size * input_size;
+        while (true) {
+            const flashes = try perform_epoch(octopus_grid[0..], &flashing_octopuses);
+            if (flashes == all_octopuses) {
+                return epoch;
+            }
+            epoch += 1;
+        }
+    }
+}
+
+fn day12(easy: bool, allocator: *Allocator) !u64 {
+    const CaveSystem = struct {
+        const Cave = struct {
+            const Type = enum { Start, End, Small, Big };
+            type: Type,
+            connections: std.ArrayList(u16),
+        };
+        caves: std.ArrayList(Cave),
+    };
+
+    var caveSystem = CaveSystem{
+        .caves = std.ArrayList(CaveSystem.Cave).init(allocator),
+    };
+    defer {
+        for (caveSystem.caves.items) |cave| {
+            cave.connections.deinit();
+        }
+        caveSystem.caves.deinit();
+    }
+
+    {
+        var file = try std.fs.cwd().openFile("input/day12", .{});
+        defer file.close();
+
+        // maps cave identifier to index in the 'caves' array
+        var cavename_to_index = std.StringHashMap(u16).init(allocator);
+        defer cavename_to_index.deinit();
+
+        // since we iterate over the file without reading it all at once,
+        // we need to store the keys of the previous map ourselves
+        var cavename_list = std.ArrayList([]u8).init(allocator);
+        defer {
+            for (cavename_list.items) |str| {
+                allocator.free(str);
+            }
+            cavename_list.deinit();
+        }
+
+        var buf: [64]u8 = undefined;
+        var reader = file.reader();
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+            const getOrCreateCave = struct {
+                fn func(caveName: []const u8, caveSys: *CaveSystem, caveNameMap: *std.StringHashMap(u16), caveNameList: *std.ArrayList([]u8), alloc: *Allocator) !u16 {
+                    if (caveName.len == 0) return error.InvalidInput;
+                    if (caveNameMap.*.get(caveName)) |idx|
+                        return idx;
+
+                    // gotta copy the string to the pool, since caveName is temporary
+                    var nameCopy: []u8 = try alloc.*.alloc(u8, caveName.len);
+                    std.mem.copy(u8, nameCopy, caveName);
+                    try caveNameList.append(nameCopy);
+
+                    const idx = @intCast(u16, caveSys.caves.items.len);
+                    try caveSys.caves.append(undefined);
+                    try caveNameMap.*.put(nameCopy, idx);
+
+                    const cave = &caveSys.caves.items[caveSys.caves.items.len - 1];
+                    cave.connections = std.ArrayList(u16).init(alloc);
+                    if (std.mem.eql(u8, caveName, "start")) {
+                        cave.*.type = CaveSystem.Cave.Type.Start;
+                    } else if (std.mem.eql(u8, caveName, "end")) {
+                        cave.*.type = CaveSystem.Cave.Type.End;
+                    } else {
+                        const isUpper = std.ascii.isUpper(caveName[0]);
+                        var i: u8 = 1;
+                        while (i < caveName.len) : (i += 1) {
+                            if (std.ascii.isUpper(caveName[i]) != isUpper) return error.InvalidInput;
+                        }
+                        cave.*.type = if (isUpper) CaveSystem.Cave.Type.Big else CaveSystem.Cave.Type.Small;
+                    }
+                    return idx;
+                }
+            }.func;
+
+            var it = std.mem.split(line, "-");
+
+            const from_idx = try getOrCreateCave(it.next() orelse return error.InvalidInput, &caveSystem, &cavename_to_index, &cavename_list, allocator);
+            const to_idx = try getOrCreateCave(it.next() orelse return error.InvalidInput, &caveSystem, &cavename_to_index, &cavename_list, allocator);
+            if (from_idx == to_idx)
+                return error.InvalidInput;
+            const from_cave = &(caveSystem.caves.items[from_idx]);
+            const to_cave = &(caveSystem.caves.items[to_idx]);
+            try from_cave.*.connections.append(to_idx);
+            try to_cave.*.connections.append(from_idx);
+            if (from_cave.*.type == CaveSystem.Cave.Type.Big and to_cave.*.type == CaveSystem.Cave.Type.Big) // two big caves cannot be connected, else we loop endlessly
+                return error.InvalidInput;
+        }
+        var has_start: bool = false;
+        var has_end: bool = false;
+        for (caveSystem.caves.items) |cave| {
+            if (cave.type == CaveSystem.Cave.Type.Start) {
+                if (has_start)
+                    return error.InvalidInput;
+                has_start = true;
+            }
+            if (cave.type == CaveSystem.Cave.Type.End) {
+                if (has_end)
+                    return error.InvalidInput;
+                has_end = true;
+            }
+        }
+        if (!has_start or !has_end)
+            return error.InvalidInput;
+    }
+
+    const Path = struct {
+        prev: []u16,
+        had_double_visit: bool,
+    };
+    var winning_paths = std.ArrayList(Path).init(allocator);
+    defer {
+        for (winning_paths.items) |path| {
+            allocator.free(path.prev);
+        }
+        winning_paths.deinit();
+    }
+    var possible_paths = std.ArrayList(Path).init(allocator);
+    defer {
+        for (possible_paths.items) |path| {
+            allocator.free(path.prev);
+        }
+        possible_paths.deinit();
+    }
+
+    var first_path = Path{
+        .prev = try allocator.alloc(u16, 1),
+        .had_double_visit = easy,
+    };
+    {
+        for (caveSystem.caves.items) |cave, i| {
+            if (cave.type == CaveSystem.Cave.Type.Start) {
+                first_path.prev[0] = @intCast(u16, i);
+                break;
+            }
+        } else return error.InvalidInput;
+    }
+    try possible_paths.append(first_path);
+    while (possible_paths.items.len > 0) {
+        const current_path: Path = possible_paths.pop();
+        const current_cave_idx: u16 = current_path.prev[current_path.prev.len - 1];
+        const current_cave = caveSystem.caves.items[current_cave_idx];
+        if (current_cave.type == CaveSystem.Cave.Type.End) {
+            winning_paths.append(current_path) catch allocator.free(current_path.prev);
+        } else {
+            defer allocator.free(current_path.prev);
+            connection: for (current_cave.connections.items) |connected_cave_idx| {
+                const connected_cave = caveSystem.caves.items[connected_cave_idx];
+                var had_double_visit: bool = current_path.had_double_visit;
+                switch (connected_cave.type) {
+                    CaveSystem.Cave.Type.Start => continue :connection,
+                    CaveSystem.Cave.Type.Big => {},
+                    CaveSystem.Cave.Type.End => {},
+                    CaveSystem.Cave.Type.Small => {
+                        prev: for (current_path.prev) |prev_cave_idx| {
+                            if (prev_cave_idx == connected_cave_idx) {
+                                if (had_double_visit) {
+                                    continue :connection;
+                                } else {
+                                    had_double_visit = true;
+                                    break :prev;
+                                }
+                            }
+                        }
+                    },
+                }
+                var new_path = Path{
+                    .prev = try allocator.alloc(u16, current_path.prev.len + 1),
+                    .had_double_visit = had_double_visit,
+                };
+                std.mem.copy(u16, new_path.prev, current_path.prev);
+                new_path.prev[new_path.prev.len - 1] = connected_cave_idx;
+                try possible_paths.append(new_path);
+            }
+        }
+    }
+    return winning_paths.items.len;
+}
+fn day13(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day14(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day15(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day16(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day17(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day18(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day19(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day20(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day21(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day22(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day23(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day24(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
+}
+fn day25(easy: bool, allocator: *Allocator) !u64 {
+    return error.Unimplemented;
 }
 
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
 
-    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var allocator = &gpa.allocator;
+    //var allocator = std.testing.allocator;
 
     const args: [][*:0]u8 = std.os.argv;
     if (args.len != 3)
@@ -436,12 +1019,31 @@ pub fn main() !void {
         return error.InvalidArguments;
 
     const val = switch (puzzle) {
-        1 => day1(easy, &allocator.allocator),
-        2 => day2(easy, &allocator.allocator),
-        3 => day3(easy, &allocator.allocator),
-        4 => day4(easy, &allocator.allocator),
-        5 => day5(easy, &allocator.allocator),
-        6 => day6(easy, &allocator.allocator),
+        1 => try day1(easy, allocator),
+        2 => try day2(easy, allocator),
+        3 => try day3(easy, allocator),
+        4 => try day4(easy, allocator),
+        5 => try day5(easy, allocator),
+        6 => try day6(easy, allocator),
+        7 => try day7(easy, allocator),
+        8 => try day8(easy, allocator),
+        9 => try day9(easy, allocator),
+        10 => try day10(easy, allocator),
+        11 => try day11(easy, allocator),
+        12 => try day12(easy, allocator),
+        13 => try day13(easy, allocator),
+        14 => try day14(easy, allocator),
+        15 => try day15(easy, allocator),
+        16 => try day16(easy, allocator),
+        17 => try day17(easy, allocator),
+        18 => try day18(easy, allocator),
+        19 => try day19(easy, allocator),
+        20 => try day20(easy, allocator),
+        21 => try day21(easy, allocator),
+        22 => try day22(easy, allocator),
+        23 => try day23(easy, allocator),
+        24 => try day24(easy, allocator),
+        25 => try day25(easy, allocator),
         else => return error.InvalidArguments,
     };
 
