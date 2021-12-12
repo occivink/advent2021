@@ -888,76 +888,87 @@ fn day12(easy: bool, allocator: *Allocator) !u64 {
     }
 
     const Path = struct {
-        prev: []u16,
-        had_double_visit: bool,
+        cave_index: u16,
+        prev_path_index: u32,
     };
-    var winning_paths = std.ArrayList(Path).init(allocator);
-    defer {
-        for (winning_paths.items) |path| {
-            allocator.free(path.prev);
-        }
-        winning_paths.deinit();
-    }
-    var possible_paths = std.ArrayList(Path).init(allocator);
-    defer {
-        for (possible_paths.items) |path| {
-            allocator.free(path.prev);
-        }
-        possible_paths.deinit();
-    }
+    var paths = std.ArrayList(Path).init(allocator);
+    defer paths.deinit();
+    var to_process = std.ArrayList(u32).init(allocator);
+    defer to_process.deinit();
+    var winning = std.ArrayList(u32).init(allocator);
+    defer winning.deinit();
 
-    var first_path = Path{
-        .prev = try allocator.alloc(u16, 1),
-        .had_double_visit = easy,
-    };
+    var previouslyCheckedCaves = try allocator.alloc(bool, caveSystem.caves.items.len);
+    defer allocator.free(previouslyCheckedCaves);
+
     {
+        var start_cave_index: u16 = undefined;
         for (caveSystem.caves.items) |cave, i| {
             if (cave.type == CaveSystem.Cave.Type.Start) {
-                first_path.prev[0] = @intCast(u16, i);
+                start_cave_index = @intCast(u16, i);
                 break;
             }
         } else return error.InvalidInput;
+        try paths.append(Path{
+            .cave_index = start_cave_index,
+            .prev_path_index = 0,
+        });
+        try to_process.append(0);
     }
-    try possible_paths.append(first_path);
-    while (possible_paths.items.len > 0) {
-        const current_path: Path = possible_paths.pop();
-        const current_cave_idx: u16 = current_path.prev[current_path.prev.len - 1];
-        const current_cave = caveSystem.caves.items[current_cave_idx];
+    while (to_process.items.len > 0) {
+        const current_path_idx: u32 = to_process.pop();
+        const current_path = paths.items[current_path_idx];
+        const current_cave = caveSystem.caves.items[current_path.cave_index];
         if (current_cave.type == CaveSystem.Cave.Type.End) {
-            winning_paths.append(current_path) catch allocator.free(current_path.prev);
+            try winning.append(current_path_idx);
         } else {
-            defer allocator.free(current_path.prev);
+            var has_children: bool = false;
             connection: for (current_cave.connections.items) |connected_cave_idx| {
                 const connected_cave = caveSystem.caves.items[connected_cave_idx];
-                var had_double_visit: bool = current_path.had_double_visit;
                 switch (connected_cave.type) {
                     CaveSystem.Cave.Type.Start => continue :connection,
                     CaveSystem.Cave.Type.Big => {},
                     CaveSystem.Cave.Type.End => {},
-                    CaveSystem.Cave.Type.Small => {
-                        prev: for (current_path.prev) |prev_cave_idx| {
-                            if (prev_cave_idx == connected_cave_idx) {
-                                if (had_double_visit) {
-                                    continue :connection;
-                                } else {
-                                    had_double_visit = true;
-                                    break :prev;
+                    CaveSystem.Cave.Type.Small => if (easy) {
+                        var prev_path_index = current_path.prev_path_index;
+                        while (prev_path_index > 0) {
+                            const prev_path = paths.items[prev_path_index];
+                            if (prev_path.cave_index == connected_cave_idx)
+                                continue :connection;
+                            prev_path_index = prev_path.prev_path_index;
+                        }
+                    } else {
+                        defer std.mem.set(bool, previouslyCheckedCaves, false);
+                        previouslyCheckedCaves[connected_cave_idx] = true;
+                        var dupes: u2 = 0;
+                        var path = current_path;
+                        while (true) {
+                            const cave = caveSystem.caves.items[path.cave_index];
+                            if (cave.type == CaveSystem.Cave.Type.Small) {
+                                if (previouslyCheckedCaves[path.cave_index]) {
+                                    dupes += 1;
+                                    if (dupes == 2) continue :connection;
                                 }
+                                previouslyCheckedCaves[path.cave_index] = true;
                             }
+                            if (path.prev_path_index == 0)
+                                break;
+                            path = paths.items[path.prev_path_index];
                         }
                     },
                 }
-                var new_path = Path{
-                    .prev = try allocator.alloc(u16, current_path.prev.len + 1),
-                    .had_double_visit = had_double_visit,
-                };
-                std.mem.copy(u16, new_path.prev, current_path.prev);
-                new_path.prev[new_path.prev.len - 1] = connected_cave_idx;
-                try possible_paths.append(new_path);
+                has_children = true;
+                try to_process.append(@intCast(u32, paths.items.len));
+                try paths.append(Path{
+                    .cave_index = connected_cave_idx,
+                    .prev_path_index = current_path_idx,
+                });
             }
+            //if (!has_children) {
+            //}
         }
     }
-    return winning_paths.items.len;
+    return winning.items.len;
 }
 fn day13(easy: bool, allocator: *Allocator) !u64 {
     return error.Unimplemented;
